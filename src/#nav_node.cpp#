@@ -39,58 +39,61 @@ int main(int argc, char **argv)
      
       ROS_INFO("The yaw currently is %f", robot.getYaw());
       // use this code only when DEBUG is true; use for testing
-#if DEBUG
-      robot.incrementInternalCount();
-      if(robot.getInternalCount() % 5 == 0){
-	  cin >> veloCommand;
-	  robot.rotateLeft(veloCommand);
-
-	}
-#endif
 
       // use this code only when DEBUG is false; default state
-#if !DEBUG
+
 	robot.incrementInternalCount();
 	if(robot.getInternalCount() % 5 == 0){
 	switch (robot.getCurrentState()){
+
 	case NEUTRAL:
 	  ROS_INFO("Our yaw was %f", robot.getYaw());
-	// do nothing
 	break;
+
 	case TURN_NEG_X:
-	// ROS has difficulty with updating yaw
-	  //	  if(robot.getInternalCount() % 10 == 5){
 	ROS_INFO("Rotating to face backwards.");
-	robot.rotate_180();
-	//	}
+	if(robot.faceDestination()){
+	  robot.setCurrentState(MOVE_FORWARD_X);
+	}
 	break;
-	ROS_INFO("Moving forward in x coordinate.");
+
 	case MOVE_FORWARD_X:
-	robot.goForwardX();
+	  ROS_INFO("Moving forward along x-axis.");
+	  if(robot.goForward(X)){
+	    robot.setCurrentState(FACE_DESTINATION);
+	    robot.determineYawGoal();
+	  }
 	break;
+
 	case FACE_DESTINATION:
-	// ROS has difficulty with updating yaw
-	  //	  if(robot.getInternalCount() % 10 == 5){
-	ROS_INFO("Facing final destination.");
-	robot.faceDestination();
-	//	}
-	break;
+	  ROS_INFO("Facing final destination.");
+	  if(robot.faceDestination()){
+	    robot.setCurrentState(MOVE_FORWARD_Y);
+	  }
+	  break;
+
 	case MOVE_FORWARD_Y:
 	ROS_INFO("Moving forward in y coordinate.");
-	robot.goForwardY();
+	if(robot.goForward(Y)){
+	  robot.setCurrentState(FACE_ORIGINAL);
+	}
 	break;
+
 	case FACE_ORIGINAL:
 	  ROS_INFO("Attempting to face original direction.");
-	  robot.faceOriginal();
+	  if(robot.faceDestination()){
+	    robot.setCurrentState(NEUTRAL);
+	    robot.reset();
+	  }
 	  break;
+
 	default:
+
 	ROS_INFO("Something is broken. We should not reach this point.");
 	}
 
 	}
-#endif
-	
-	//robot.goRobotGo();
+
       loopRate.sleep();
       ros::spinOnce();
      

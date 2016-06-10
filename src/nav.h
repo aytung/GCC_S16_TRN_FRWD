@@ -27,11 +27,11 @@
 |      |___|    
 |        ____________ Y-
   */
-
+#define DEBUG 0
 using namespace std;
 
-enum State{ NEUTRAL, TURN_NEG_X_1_2, TURN_NEG_X_2_2,  MOVE_FORWARD_X,FACE_DESTINATION, MOVE_FORWARD_Y};
-    
+enum State{ NEUTRAL, TURN_NEG_X, MOVE_FORWARD_X,FACE_DESTINATION, MOVE_FORWARD_Y, FACE_ORIGINAL };
+enum Direction{X, Y};    
 
 class RoboState
   {
@@ -43,8 +43,10 @@ class RoboState
     // constructor
     RoboState(ros::NodeHandle rosNode);
     double getYaw();
-    void turn_neg_x_1_2();
-    void turn_neg_x_2_2();
+    
+    
+
+    void faceOriginal();
     void rotate_180();
     void goForwardX();
     void goForwardY();
@@ -54,22 +56,16 @@ class RoboState
     bool currentCountOdd();
     int getInternalCount();
 
-#if DEBUG
-    void rotateLeft(double velocity);
-    void rotateRight(double velocity);
-    void rotateLeft_90();
-    void rotateRight_90();
-#endif
+
+
+
     
   private:
-    bool initialXnegative;
-#if !DEBUG
+
     void rotateLeft();
     void rotateRight();
     void rotateLeft_90();
     void rotateRight_90();
-
-#endif
 
     // the ros node being used by RoboState
     ros::NodeHandle node;    
@@ -93,7 +89,7 @@ class RoboState
     void determineYawGoal();
 
     // these are private if we just call goRobotGo
-#if !USE_MAIN
+    /*
     int getInternalCount();
     void rotate_180();
     void goForwardX();
@@ -103,7 +99,7 @@ class RoboState
     void faceDestination();
     bool currentCountOdd();
         double getYaw();
-#endif
+    */
 
     // private variables
     double xTarget;
