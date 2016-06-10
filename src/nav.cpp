@@ -20,22 +20,18 @@ const double INCREMENT_AMT = .1;
 const double LEFT_90 = 2.54629;
 // how much angular velocity we need to move right 90 degrees
 const double RIGHT_90 = -2.56;
-// this is how long the TurtleBot takes to move INCREMENT_AMT distance forward
-const double MOVEMENT_INTERVAL = 500000;
+
+const double ROTATION_VELOCITY = 0.2;
+
+const double FORWARD_VELOCITY = 0.2;
+
 // how much we need to multiply radians by in order to get degrees
 const double ANGLE_CONVERT = 57.2958;
-// approximately Pi, used to indicate around 180 degrees (must be under pi, incase of overshooting
-const double YAW_180 = 3.1415;
 
-const double LEFT_30 = 1;
-const double RIGHT_30 = -1;
 
-const double LEFT_10 = .5;
-
-const double RIGHT_10 = -.5;
 
 // initializer for RoboState::State (with default values)
-RoboState::RoboState(ros::NodeHandle rosNode): xCoord(0), yCoord(0), xOdomOld(0), yOdomOld(0), yaw(0), yawGoal(0), count(0), currentState(NEUTRAL), internalCount(0)
+RoboState::RoboState(ros::NodeHandle rosNode): xCoord(0), yCoord(0), xOdomOld(0), yOdomOld(0), yaw(0), yawGoal(0), count(0), currentState(NEUTRAL), internalCount(0), acceptErr(.1)
 {
   // declare which ROS node we use
   this->node = rosNode;
@@ -49,14 +45,6 @@ RoboState::RoboState(ros::NodeHandle rosNode): xCoord(0), yCoord(0), xOdomOld(0)
   this->odomSubscriber = this->node.subscribe("/odom", 100, &RoboState::odomCallback, this);
 }
 
-
-
-
-
-
-
-	return done;
-}
 // face the final destination, which is determined by yawGoal
 bool RoboState::faceDestination()
 {
@@ -67,10 +55,10 @@ bool RoboState::faceDestination()
   if(yawOffset <= -ANGLE_ERR || yawOffset >= ANGLE_ERR){
     this->velocityCommand.linear.x = 0.0;
     if(yawOffset > 0){
-    this->velocityCommand.angular.z = angularVelocity;
+    this->velocityCommand.angular.z = ROTATION_VELOCITY;
     }
     else{
-      this->velocityCommand.angular.z = -angularVelocity;
+      this->velocityCommand.angular.z = -ROTATION_VELOCITY;
     }
     
   }
@@ -116,41 +104,43 @@ void RoboState::determineYawGoal()
   }
 }
 
-void RoboState::reset(){
-}
 
-
-void RoboState::goForward(Direction currentDirection)
+bool RoboState::goForward(Direction currentDirection)
 {
   bool done = false;
 
   if (currentDirection == X){
-    {
-      double xOffset = getX() - getXodom();
+    double xOffset = getX() - getXodom();
       
-      if(xOffset <= -getErr() || xOffset >= getErr()){
-      this->velocityCommand.linear.x = xMoveCommand;
-      this->velocityCommand.angular.z = 0.0;
-      velocityPublisher.publish(this->velocityCommand);
-      }
-      else{
-	ROS_INFO("Done with forward movement in the X direction.");
-	done = true;
-      }
+    if(xOffset <= -getErr() || xOffset >= getErr()){
+      this->velocityCommand.linear.x = FORWARD_VELOCITY;
     }
-    else if (currentDirection == Y){
-      double yOffset = getY() - getYodom();
+    else{
+      ROS_INFO("Done with forward movement in the X direction.");
+      this->velocityCommand.linear.x = 0.0;
+      done = true;
+    }
+  }
+  else if (currentDirection == Y){
+    double yOffset = getY() - getYodom();
 
-      if(xOffset <= -getErr() || xOffset >= getErr()){
-      this->velocityCommand.linear.x = xMoveCommand;
-      this->velocityCommand.angular.z = 0.0;
-      velocityPublisher.publish(this->velocityCommand);
-      }
-      else{
-	ROS_INFO("Done with forward movement in the Y direction.");
-	done = true;
-      }
+    if(yOffset <= -getErr() || yOffset >= getErr()){
+  this->velocityCommand.linear.x = FORWARD_VELOCITY;
     }
+    else{
+      ROS_INFO("Done with forward movement in the Y direction.");
+      this->velocityCommand.linear.x = 0.0;
+      done = true;
+    }
+
+
+  }
+
+
+
+  this->velocityCommand.angular.z = 0.0;    
+      velocityPublisher.publish(this->velocityCommand);
+  return done;
 }
 
 void RoboState::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
@@ -161,7 +151,7 @@ void RoboState::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
   setYodom(msg->pose.pose.position.y);
   
   // convert from quaternions to angles
-  tf::Quaternion q(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.orientation.z,msg->pose.pose.orientation.w);
+  tf::Quaternion q(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z,msg->pose.pose.orientation.w);
   tf::Matrix3x3 m(q);
   double roll, pitch, tempYaw;
   m.getRPY(roll, pitch, tempYaw);

@@ -8,8 +8,6 @@
 #include "std_msgs/String.h"
 #include <tf/transform_listener.h>
 
-// debug is 1 when debugging, 0 when not
-
 /* This is a visualization of what the x and y coordinates represent on 
    relative to the direction that the turtlebot is facing.
    |         X+        . (destination)
@@ -31,66 +29,85 @@ int main(int argc, char **argv)
   geometry_msgs::Twist cmd_vel;
   
   ros::Rate loopRate(10); // 10 hz
-  int count = 0; 
-  char choice;
-  double veloCommand;
+
   while(ros::ok())
     {
      
-      ROS_INFO("The yaw currently is %f", robot.getYaw());
-      // use this code only when DEBUG is true; use for testing
-#if DEBUG
       robot.incrementInternalCount();
       if(robot.getInternalCount() % 5 == 0){
-	  cin >> veloCommand;
-	  robot.rotateLeft(veloCommand);
-
-	}
-#endif
-
-      // use this code only when DEBUG is false; default state
-#if !DEBUG
-	robot.incrementInternalCount();
-	if(robot.getInternalCount() % 5 == 0){
 	switch (robot.getCurrentState()){
+
 	case NEUTRAL:
 	  ROS_INFO("Our yaw was %f", robot.getYaw());
-	// do nothing
-	break;
+	  break;
+
 	case TURN_NEG_X:
-	// ROS has difficulty with updating yaw
-	  //	  if(robot.getInternalCount() % 10 == 5){
-	ROS_INFO("Rotating to face backwards.");
-	robot.rotate_180();
-	//	}
-	break;
-	ROS_INFO("Moving forward in x coordinate.");
+	  // We need to face backwards so that numbers faces direction we move
+	  ROS_INFO("Rotating to face backwards.");
+	  if(robot.faceDestination()){
+	    robot.setCurrentState(MOVE_FORWARD_X);
+	  }
+	  break;
+
 	case MOVE_FORWARD_X:
-	robot.goForwardX();
-	break;
+	  ROS_INFO("Moving forward along x-axis.");
+
+	  if(robot.goForward(X)){
+	    
+	    if(robot.getY() > 0){
+	      ROS_INFO("We need to face positive y.");
+	      // We need to face positive-Y axis
+	      robot.setYawGoal(90);
+	      robot.setCurrentState(FACE_DESTINATION);	      
+	    }
+	    else if(robot.getY() < 0){
+	      ROS_INFO("We need to face negative y.");
+	      // We need to face negative-Y axis
+	      robot.setYawGoal(-90);
+	      robot.setCurrentState(FACE_DESTINATION);	      
+	    }
+	    else{
+	      ROS_INFO("We have a y-value of 0, so we are done with movement.");
+	      // We are done with movement, so just face original destination
+	      robot.setCurrentState(FACE_ORIGINAL);
+	    }
+	  }
+	  break;
+
 	case FACE_DESTINATION:
-	// ROS has difficulty with updating yaw
-	  //	  if(robot.getInternalCount() % 10 == 5){
-	ROS_INFO("Facing final destination.");
-	robot.faceDestination();
-	//	}
-	break;
+	  ROS_INFO("Facing final destination.");
+	  if(robot.faceDestination()){
+	    ROS_INFO("Done facing final destination.");
+	    robot.setCurrentState(MOVE_FORWARD_Y);
+	  }
+	  break;
+
 	case MOVE_FORWARD_Y:
-	ROS_INFO("Moving forward in y coordinate.");
-	robot.goForwardY();
-	break;
+	  ROS_INFO("Moving forward in y axis.");
+	  if(robot.goForward(Y)){
+	    ROS_INFO("Done moving in y-axis.");
+	    robot.setCurrentState(FACE_ORIGINAL);
+	    robot.setY(0);
+	    robot.setYawGoal(0);
+	  }
+	  break;
+
 	case FACE_ORIGINAL:
 	  ROS_INFO("Attempting to face original direction.");
-	  robot.faceOriginal();
+	  if(robot.faceDestination()){
+	    ROS_INFO("Done with movement.");
+	    robot.setCurrentState(NEUTRAL);
+
+	  }
 	  break;
+
 	default:
-	ROS_INFO("Something is broken. We should not reach this point.");
+
+	  ROS_INFO("Something is broken. We should not reach this point.");
 	}
 
-	}
-#endif
-	
-	//robot.goRobotGo();
+      }
+
       loopRate.sleep();
       ros::spinOnce();
      

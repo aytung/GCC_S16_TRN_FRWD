@@ -36,7 +36,6 @@ enum Direction{X, Y};
 class RoboState
   {
   public:
-
     // test function
     void testForward();
     void goRobotGo();
@@ -44,22 +43,18 @@ class RoboState
     RoboState(ros::NodeHandle rosNode);
     double getYaw();
     
-    
-
     void faceOriginal();
     void rotate_180();
-    void goForwardX();
-    void goForwardY();
+    void setY(double y);
+    double getY();
     State getCurrentState();
     void incrementInternalCount();
-    void faceDestination();
+    bool faceDestination();
     bool currentCountOdd();
     int getInternalCount();
-
-
-
-
-    
+    bool goForward(Direction currentDirection);
+    void setYawGoal(double newYawGoal);
+    void setCurrentState(State newState);
   private:
 
     void rotateLeft();
@@ -88,19 +83,6 @@ class RoboState
     int internalCount;
     void determineYawGoal();
 
-    // these are private if we just call goRobotGo
-    /*
-    int getInternalCount();
-    void rotate_180();
-    void goForwardX();
-    void goForwardY();
-    State getCurrentState();
-    void incrementInternalCount();
-    void faceDestination();
-    bool currentCountOdd();
-        double getYaw();
-    */
-
     // private variables
     double xTarget;
     double yTarget;
@@ -116,13 +98,11 @@ class RoboState
     double yawGoal;
 
     // get and set functions
-    void setCurrentState(State newState);
+
     void setXodom(double xOdom);
     void setYaw(double newYaw);
-
     void setYodom(double yOdom);
     double getYawGoal();
-
     void setErr(double err);
     double getErr();
     double getXodom();
@@ -131,12 +111,12 @@ class RoboState
     double getYodomOld();
     void setXodomOld(double xOdomCurrent);
     void setYodomOld(double yOdomCurrent);
-    void setYawGoal(double newYawGoal);
+
     double getX();
     void setX(double x);
-    void setY(double y);
-    double getY();
+
 
   };
+
 #include "nav.cpp"
 #endif // NAV_NODE_H
