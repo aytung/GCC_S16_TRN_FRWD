@@ -9,9 +9,10 @@
 #include <cmath>
 #include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h>
+#include <stdio.h>
 // the least amount the turtlebot can move, otherwise odometry breaks;
 // serves as our acceptable error
-const double ANGLE_ERR = 3;
+const double ANGLE_ERR = 3.5;
 // how much we need in velocity commands to move INCREMENT_AMT forward
 const double MOVEMENT_MULTIPLE = 1.8; 
 // how much we move forward/backward each increment
@@ -21,7 +22,7 @@ const double LEFT_90 = 2.54629;
 // how much angular velocity we need to move right 90 degrees
 const double RIGHT_90 = -2.56;
 
-const double ROTATION_VELOCITY = 0.2;
+const double ROTATION_VELOCITY = .8;
 
 const double FORWARD_VELOCITY = 0.2;
 
@@ -74,45 +75,15 @@ velocityPublisher.publish(this->velocityCommand);
 }
 
 
-// assumes that x is zero and y is nonzero. May want to add cases for when method is called in error
-void RoboState::determineYawGoal()
-{
-  ROS_INFO("Switching x and y coordinates.");
-  //usleep(MOVEMENT_INTERVAL);
 
-  if( getY() > 0){ // means that destination is on right
-    setYawGoal(90);
-    ROS_INFO("Our yaw goal is %f", getYaw());
-  }
-  else if ( getY() < 0){ // means that destination is on right
-    setYawGoal(-90);
-  }
-  else if (getX() < 0){ // means that we must face opposite initial direction
-    setYawGoal(180);
-  }
-  else
-    setYawGoal(0); // means that we must face initial direction
-
-  if(getY() > 0){
-    ROS_INFO("Your y-coordinate is positive.");
-  }
-  else if(getY() < 0){
-    ROS_INFO("Your y-coordinate is negative.");
-  }
-  else{
-    ROS_INFO("Your y-coordinate is zero.");
-  }
-}
-
-
-bool RoboState::goForward(Direction currentDirection)
+bool RoboState::goForward()
 {
   bool done = false;
+  
+  double offset = sqrt(pow(getX()-getXodom(),2) + pow(getY()-getYodom(),2));
 
-  if (currentDirection == X){
-    double xOffset = getX() - getXodom();
-      
-    if(xOffset <= -getErr() || xOffset >= getErr()){
+if(offset <= -getErr() || offset >= getErr()){
+      ROS_INFO("Moving forward because we are off by %f.", offset);
       this->velocityCommand.linear.x = FORWARD_VELOCITY;
     }
     else{
@@ -120,23 +91,7 @@ bool RoboState::goForward(Direction currentDirection)
       this->velocityCommand.linear.x = 0.0;
       done = true;
     }
-  }
-  else if (currentDirection == Y){
-    double yOffset = getY() - getYodom();
-
-    if(yOffset <= -getErr() || yOffset >= getErr()){
-  this->velocityCommand.linear.x = FORWARD_VELOCITY;
-    }
-    else{
-      ROS_INFO("Done with forward movement in the Y direction.");
-      this->velocityCommand.linear.x = 0.0;
-      done = true;
-    }
-
-
-  }
-
-
+  
 
   this->velocityCommand.angular.z = 0.0;    
       velocityPublisher.publish(this->velocityCommand);
@@ -161,23 +116,14 @@ void RoboState::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
   bool isTempYawNeg = (tempYaw < 0);
   
   // we always want a positive yaw value (for consistency)
-  if(getY() >= 0){
-    if(isTempYawNeg){
-      setYaw(360+tempYaw);
-    }
-    else{
-      setYaw(tempYaw);
-    }
+
+  if(isTempYawNeg){
+    setYaw(360+tempYaw);
   }
-  // we always want a negative yaw value (for consistency)
   else{
-    if(isTempYawNeg){
-      setYaw(tempYaw);
-    }
-    else{
-      setYaw(-360+tempYaw);
-    }
+    setYaw(tempYaw);
   }
+
 
   // we do not want to get spammed with messages about yaw.
   if(getInternalCount() % 100==1){
@@ -201,34 +147,23 @@ void RoboState::messageCallback(const turtlebot::mymsg::ConstPtr& msg)
 	ROS_INFO("No reason to move a distance of 0. Message not sent.");
       else{	  
 	ROS_INFO("X and Y coordinates sent were: x:%f y:%f", msg->x, msg->y);
+
+	setYawGoal(atan(msg->x/msg->y)*ANGLE_CONVERT);
+
 	setX(msg->x + getXodom());
 	setY(msg->y + getYodom());
 	ROS_INFO("xCoord is: %f. yCoord is: %f", getX(), getY());
 	
 	// we don't need to face backward since initial movement is forward
-	if(getX() > 0){
-	  setCurrentState(MOVE_FORWARD_X);
-	}
-	// need to face backward since initial movement is backward
-	// (want bumper sensors to be useful)
-       	else if (getX() < 0){
-	  if(getY() > 0){
-	    setYawGoal(180);
-	  }
-	  else{
-	    setYawGoal(-180);
-	  }
-	  setCurrentState(TURN_NEG_X);
-	}
-	else{
-	  setCurrentState(FACE_DESTINATION);
-	//setErr(sqrt(pow(getX(),2)+pow(getY(),2))*.1);
+	setCurrentState(FACE_DESTINATION);
+
+
 	  setErr(.1);
       }
       // need to determine what direction we will ultimately face
-      determineYawGoal();
+
       }
-    }
+    
   else{
     ROS_INFO("Cannot accept message. Movement still in progress.");
   }
@@ -247,29 +182,6 @@ void RoboState::bumperCallback(const create_node::TurtlebotSensorState::ConstPtr
   }
 }
   
-
-// we use this because it has been calibrated to turn 90 degrees left
-void RoboState::rotateLeft_90()
-{
-  ROS_INFO("Rotating left.");
-  //usleep(MOVEMENT_INTERVAL);
-  this->velocityCommand.linear.x = 0.0;
-  this->velocityCommand.angular.z = LEFT_90;
-  velocityPublisher.publish(this->velocityCommand);
-  //usleep(MOVEMENT_INTERVAL/5);
-}
-
-// we use this because it has been calibrated to turn 90 degrees right
-void RoboState::rotateRight_90()
-{
-  ROS_INFO("Rotating right.");
-  //usleep(MOVEMENT_INTERVAL);
-  this->velocityCommand.linear.x = 0.0;
-  this->velocityCommand.angular.z = RIGHT_90;
-  velocityPublisher.publish(this->velocityCommand);
-  //usleep(MOVEMENT_INTERVAL/5);
-}
-
 /*
   Section for dealing with internalCount
 

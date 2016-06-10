@@ -6,13 +6,16 @@
 #include <iostream>
 //#include "node_example/listener.h"
 #include "geometry_msgs/Twist.h"
-
 #include "create_node/TurtlebotSensorState.h"
 #include <string>
 #include <cstring>
 #include <math.h>
 #include <cmath>
 #include <nav_msgs/Odometry.h>
+
+// change this to 0 when you want to use goRobotGo
+// change this to 1 when you want to use nav_node.cpp
+#define USE_MAIN 1
  /* This is a visualization of what the x and y coordinates represent on 
    relative to the direction that the turtlebot is facing.
 |         X+        . (destination)
@@ -24,34 +27,39 @@
 |      |___|    
 |        ____________ Y-
   */
-
+#define DEBUG 0
 using namespace std;
+
+enum State{ NEUTRAL, FACE_DESTINATION, MOVE_FORWARD, FACE_ORIGINAL};
 
 class RoboState
   {
   public:
-
     // test function
     void testForward();
-
+    void goRobotGo();
     // constructor
     RoboState(ros::NodeHandle rosNode);
-
-    // determines what action to take
-    void goRobotGo();
-
+    double getYaw();
+    
+    void faceOriginal();
+    void rotate_180();
+    void setY(double y);
+    double getY();
+    State getCurrentState();
+    void incrementInternalCount();
+    bool faceDestination();
+    bool currentCountOdd();
+    int getInternalCount();
+    bool goForward();
+    void setYawGoal(double newYawGoal);
+    void setCurrentState(State newState);
   private:
 
-    // various callback functions
-    void bumperCallback(const create_node::TurtlebotSensorState::ConstPtr& msg);
-    void messageCallback(const turtlebot::mymsg::ConstPtr& msg);
-    void setMessageStatus(bool status);    
-    void odomCallback(const nav_msgs::Odometry::ConstPtr& odom);
-    ros::Subscriber odomSubscriber;
-    
 
-    void faceDestination();
-    void determineYawGoal();
+
+    void rotateLeft_90();
+    void rotateRight_90();
 
     // the ros node being used by RoboState
     ros::NodeHandle node;    
@@ -63,13 +71,18 @@ class RoboState
     ros::Subscriber messageSubscriber;
     ros::Subscriber bumperSubscriber;
 
+    State currentState;
+    // various callback functions
+    void bumperCallback(const create_node::TurtlebotSensorState::ConstPtr& msg);
+    void messageCallback(const turtlebot::mymsg::ConstPtr& msg);
+    void setMessageStatus(bool status);    
+    void odomCallback(const nav_msgs::Odometry::ConstPtr& odom);
+    ros::Subscriber odomSubscriber;
+    int count;
+    int internalCount;
+    void determineYawGoal();
 
-    // incrementing functions (not used)
-    void incrementX(double x);
-    void incrementY(double y);
-    
     // private variables
-    bool initXneg;
     double xTarget;
     double yTarget;
     double xOdom;
@@ -78,29 +91,17 @@ class RoboState
     double yOdomOld;
     double xCoord;
     double yCoord;
-    bool messageStatus;
-    bool negXturn;
-    bool isXswapped;
     double acceptErr;
     double yawErr;
     double yaw;
     double yawGoal;
-    bool rotated;
-	    
+
     // get and set functions
+
     void setXodom(double xOdom);
     void setYaw(double newYaw);
-    double getYaw();
     void setYodom(double yOdom);
-    bool isMessageSet();
     double getYawGoal();
-    void setTurnNegX(bool xTurnStatus);
-    bool getTurnNegX();
-    void turnForward();
-    void goForwardX();
-    void goForwardY();
-    void rotateLeft();
-    void rotateRight();
     void setErr(double err);
     double getErr();
     double getXodom();
@@ -109,20 +110,12 @@ class RoboState
     double getYodomOld();
     void setXodomOld(double xOdomCurrent);
     void setYodomOld(double yOdomCurrent);
-    bool getIsXswapped();
-    void setIsXswapped(bool xSwapValue);
-    void setYawGoal(double newYawGoal);
+
     double getX();
     void setX(double x);
-    void setInitialXnegative(bool initialXstatus);
-    bool getInitialXnegative();
-    void setRotated(bool rotatedState);
-    bool getRotated();
-    void setY(double y);
-    double getY();
-    bool getTurnAndGoForward();
-    void setTurnAndGoForward(bool value);
+
 
   };
+
 #include "nav.cpp"
 #endif // NAV_NODE_H

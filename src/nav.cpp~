@@ -1,6 +1,6 @@
 #ifndef NAV_CPP
 #define NAV_CPP
-#include <sample_pubsub/mymsg.h>
+#include <turtlebot/mymsg.h>
 #include "nav.h"
 #include "ros/ros.h"
 #include <string>
@@ -9,25 +9,31 @@
 #include <cmath>
 #include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h>
-
-// how much we need in velocity commands to move incrementAmt forward
-const double movementMultiple = 1.8; 
+// the least amount the turtlebot can move, otherwise odometry breaks;
+// serves as our acceptable error
+const double ANGLE_ERR = 3.5;
+// how much we need in velocity commands to move INCREMENT_AMT forward
+const double MOVEMENT_MULTIPLE = 1.8; 
 // how much we move forward/backward each increment
-const double incrementAmt = .1;
+const double INCREMENT_AMT = .1;
 // how much angular velocity we need to move right 90 degrees
-const double left_90 = 2.54629;
+const double LEFT_90 = 2.54629;
 // how much angular velocity we need to move right 90 degrees
-const double right_90 = -2.56;
-// this is how long the TurtleBot takes to move incrementAmt distance forward
-const double movementInterval = 500000;
-// how much we need to multiply radians by in order to get degrees
-const double angleConvert = 57.2958;
-// approximately Pi, used to indicate around 180 degrees (must be under pi, incase of overshooting
-const double yaw_180 = 3.1415;
+const double RIGHT_90 = -2.56;
 
-// initializer for RoboState (with default values)
-RoboState::RoboState(ros::NodeHandle rosNode): xCoord(0), yCoord(0), messageStatus(false), xOdomOld(0), yOdomOld(0), negXturn(false), initXneg(false), yaw(0), rotated(false), yawErr(.1), yawGoal(0)
+const double ROTATION_VELOCITY = .8;
+
+const double FORWARD_VELOCITY = 0.2;
+
+// how much we need to multiply radians by in order to get degrees
+const double ANGLE_CONVERT = 57.2958;
+
+
+
+// initializer for RoboState::State (with default values)
+RoboState::RoboState(ros::NodeHandle rosNode): xCoord(0), yCoord(0), xOdomOld(0), yOdomOld(0), yaw(0), yawGoal(0), count(0), currentState(NEUTRAL), internalCount(0), acceptErr(.1)
 {
+  // declare which ROS node we use
   this->node = rosNode;
   // publishes velocity messages
   this->velocityPublisher = this->node.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 1);
@@ -39,288 +45,127 @@ RoboState::RoboState(ros::NodeHandle rosNode): xCoord(0), yCoord(0), messageStat
   this->odomSubscriber = this->node.subscribe("/odom", 100, &RoboState::odomCallback, this);
 }
 
+// face the final destination, which is determined by yawGoal
+bool RoboState::faceDestination()
+{
+  bool done = false;
+  ROS_INFO("Calling face destination.");
+  double yawOffset = getYawGoal() - getYaw();
+  
+  if(yawOffset <= -ANGLE_ERR || yawOffset >= ANGLE_ERR){
+    this->velocityCommand.linear.x = 0.0;
+    if(yawOffset > 0){
+    this->velocityCommand.angular.z = ROTATION_VELOCITY;
+    }
+    else{
+      this->velocityCommand.angular.z = -ROTATION_VELOCITY;
+    }
+    
+  }
+  else {
+    this->velocityCommand.linear.x = 0.0;
+    this->velocityCommand.angular.z = 0.0;
+
+    done = true;
+  }
+velocityPublisher.publish(this->velocityCommand);
+  
+  return done;
+}
+
+
+
+bool RoboState::goForward();
+{
+  bool done = false;
+  
+  double offset = sqrt(pow((getX()-getXodom()),2) + pow(getY()-getYodom),2));
+
+    if(offset <= -getErr() || offset >= getErr()){
+      ROS_INFO("Moving forward because we are off by %f.", Offset);
+      this->velocityCommand.linear.x = FORWARD_VELOCITY;
+    }
+    else{
+      ROS_INFO("Done with forward movement in the X direction.");
+      this->velocityCommand.linear.x = 0.0;
+      done = true;
+    }
+  }
+
+  this->velocityCommand.angular.z = 0.0;    
+      velocityPublisher.publish(this->velocityCommand);
+  return done;
+}
+
 void RoboState::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
+  
   // set odometry
-  xOdom = msg->pose.pose.position.x;
-  yOdom = msg->pose.pose.position.y;
+  setXodom(msg->pose.pose.position.x);
+  setYodom(msg->pose.pose.position.y);
   
   // convert from quaternions to angles
-  tf::Quaternion q(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.orientation.z,msg->pose.pose.orientation.w);
+  tf::Quaternion q(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z,msg->pose.pose.orientation.w);
   tf::Matrix3x3 m(q);
   double roll, pitch, tempYaw;
   m.getRPY(roll, pitch, tempYaw);
-
+  
+  tempYaw*=ANGLE_CONVERT;
   // determine whether to send positive or negative angles
-  bool isYawGoalNeg = (getYawGoal() < 0);
+  bool isTempYawNeg = (tempYaw < 0);
+  
+  // we always want a positive yaw value (for consistency)
 
-  if (!isYawGoalNeg){
-    if(tempYaw < 0)
-      setYaw(2*yaw_180+tempYaw);
-    else
-      setYaw(tempYaw);
+  if(isTempYawNeg){
+    setYaw(360+tempYaw);
   }
   else{
-    if(getY() < 0)
-      setYaw(tempYaw);
-    else
-      setYaw(-2*yaw_180+tempYaw);
+    setYaw(tempYaw);
   }
 
-  ROS_INFO("The odometry was %f", getYaw()*angleConvert);
 
-}
+  // we do not want to get spammed with messages about yaw.
+  if(getInternalCount() % 100==1){
+    ROS_INFO("The yaw was %f", getYaw());
 
-// face the final destination, which is determined by yawGoal
-void RoboState::faceDestination()
-{
-  // how much we are off the goal
-  double yawOffset = getYawGoal() - getYaw();
-
-  // means that we are off by more than 90 degrees
-  if(yawOffset >= yaw_180/2) 
-    rotateLeft();
-  // means that we are off by less than -90 degrees
-  else if(yawOffset <= -yaw_180/2)
-    rotateRight();
-  // means that we are off by between 90 and -90 degrees
-  else if(yawOffset>= yawErr || yawOffset <= -yawErr){
-    usleep(movementInterval);
-    this->velocityCommand.linear.x = 0;
-    this->velocityCommand.angular.z = yawOffset*angleConvert*left_90*left_90;
-  }
-  else // means are we are close enough to facing goalYaw
-    setRotated(true);
-}
-
-// means that we need to face backwards, since initial x was negative
-// and that initial y was positive
-void RoboState::turn_180_positive_y()
-{
-  double yawOffset = yaw_180 - getYaw();
-
-  // means that we are off by more than 90 degrees
-  if(yawOffset >= yaw_180/2)
-    rotateLeft();
-  // means that we are off by less than -90 degrees
-  else if(yawOffset <= -yaw_180/2)
-    rotateRight();
-  // means that we are off by between 90 and -90 degrres
-  if(yawOffset>= yawErr || yawOffset <= -yawErr){
-    usleep(movementInterval);
-    this->velocityCommand.linear.x = 0.0;
-    this->velocityCommand.angular.z = yawOffset*angle_convert*left_90/90;
-  }
-  else // means that we are basically facing backwards, with a margin of yawErr
-    setTurnNegX(true);
-}
-
-// means that we need to face backwards since initial x was negative
-// and initial y was negative as well
-void RoboState::turn_180_negative_y()
-{
-  double yawOffset = -yaw_180 - getYaw();
-  // means that we are off by more than 90 degrees
-  if(yawOffset >= yaw_180/2)
-    rotateLeft();
-  // means that we are off by less than -90 degrees
-  else if(yawOffset <= -yaw_180/2)
-    rotateRight();
-  // means that we are off by between 90 and -90 degrees
-  if(yawOffset>= yawErr || yawOffset <= -yawErr){
-    usleep(movementInterval);
-    this->velocityCommand.linear.x = 0.0;
-    this->velocityCommand.angular.z = yawOffset*angleConvert*left_90/90;
-  }
-  else // means that we are basically facing backwards, with a margin of yawErr
-    setTurnNegX(true);
-}
-
-void RoboState::goRobotGo()
-{
-  if(isMessageSet()){
-
-    if(getInitialXnegative()){
-      if(!getTurnNegX()){
-	if(getY() > 0)
-	  turn_180_positive_y();
-	else
-	  turn_180_negative_Y();
-      }
-      else if(!getRotated()){
-	goForwardX();
-      }
-      else if(getRotated()){
-	goForwardY();
-      }
-    } // end if
+    if(getY() >= 0){
+      ROS_INFO("The yaw is supposed to be positive.");
+    }
     else{
-      if(!getRotated())
-	goForwardX();
-      else if(getRotated())
-	goForwardY();
-    } // end else
-  } // end if
-
-} // end goRobotGo
-
-
-  // assumes that x is zero and y is nonzero. May want to add cases for when method is called in error
-void RoboState::determineYawGoal()
-{
-  ROS_INFO("Switching x and y coordinates.");
-  usleep(movementInterval);
-
-  if( getY() > 0){ // means that destination is on right
-    setYawGoal(yaw_180/2);
-  }
-  else if ( getY() < 0){ // means that destination is on right
-    setYawGoal(-yaw_180/2);
-  }
-  else 
-    setYawGoal(0); // means that y is zero
-
-  if(getY() > 0){
-    ROS_INFO("Your y-coordinate is positive.");
-  }
-  else if(getY() < 0){
-    ROS_INFO("Your y-coordinate is negative.");
-  }
-  else{
-    ROS_INFO("Your y-coordinate is zero.");
-  }
-}
-
-void RoboState::goForwardX()
-{
-
-  if(getX() <= -incrementAmt || getX() >= incrementAmt )
-    {
-      double xMoveCommand; 
-      usleep(movementInterval);
-      xMoveCommand = incrementAmt*movementMultiple;
-      this->velocityCommand.linear.x = xMoveCommand;
-      this->velocityCommand.angular.z = 0.0;
-      velocityPublisher.publish(this->velocityCommand);
-      double currentXodom = getXodom();
-      double amountMoved = currentXodom-getXodomOld();
-      setX(getX()-amountMoved);
-      setXodomOld(currentXodom);
-      usleep(movementInterval/10);
-      ROS_INFO("We moved %f", amountMoved);
-      ROS_INFO("The remaining amount to move is %f", getX());
+      ROS_INFO("The yaw is supposed to be negative.");
     }
-  else if(getX() <= getErr() && getX() >= -getErr()){
-    faceDestination();
   }
-  else{
-    usleep(movementInterval);
-    double xMoveCommand = abs(getX())*movementMultiple;
-    this->velocityCommand.linear.x = xMoveCommand;
-    this->velocityCommand.angular.z = 0.0;
-    velocityPublisher.publish(this->velocityCommand);
-    ROS_INFO("We moved forward %f", getX());
-    double currentXodom = getXodom();
-    double amountMoved = currentXodom-getXodomOld();
-    setX(getX()-amountMoved);
-    setXodomOld(currentXodom);
-    usleep(movementInterval/10);
-    ROS_INFO("The remaining amount to move is %f (should be around zero)", getX());
-  }
-}
-	      
-void RoboState::goForwardY()
-{
- 
-  if(getY() <= -incrementAmt || getY() >= incrementAmt )
-    {
-      double xMoveCommand; 
-      usleep(movementInterval);
-      xMoveCommand = incrementAmt*movementMultiple;
-      this->velocityCommand.linear.x = xMoveCommand;
-      this->velocityCommand.angular.z = 0.0;
-      velocityPublisher.publish(this->velocityCommand);
-      double currentYodom = getYodom();
-      double amountMoved = currentYodom-getYodomOld();
-      setY(getY()-amountMoved);
-      setYodomOld(currentYodom);
-      usleep(50000);
-      ROS_INFO("We moved %f", amountMoved);
-      ROS_INFO("The remaining amount to move is %f", getY());
-    }
-  else if(getX() <= getErr() && getX() >= -getErr()){
-    setMessageStatus(false);
-  }
-  else{
-    double xMoveCommand = abs(getY())*movementMultiple;
-    usleep(movementInterval);
-    this->velocityCommand.linear.x = xMoveCommand;
-    this->velocityCommand.angular.z = 0.0;
-    velocityPublisher.publish(this->velocityCommand);
-    double currentYodom = getXodom();
-    double amountMoved = currentYodom-getYodomOld();
-    setY(getY()-amountMoved);
-    setYodomOld(currentYodom);
-    ROS_INFO("The remaining amount to move is %f (should be around zero)", getY());
-  }
-}
-
-// Change the value of Movement multiple until turtlebot moves forward by incrementAmt.
-// And stops for movementInterval.
-void RoboState::testForward()
-{
-  // may need to adjust value for whatever reason
-  usleep(movementInterval);
-  double xMoveCommand; 
-  // only move forward incrementAmt if the amount left to move is greater than incrementAmt
-
-  // ideally, this should result in forward (or backward movement)
-  // in the x direction by incrementAmt
-
-  this->velocityCommand.linear.x = .1;
-  this->velocityCommand.angular.z = 0;
-	  
-  velocityPublisher.publish(this->velocityCommand);
-  // ideally, this is the amount that x has changed
-  // we should wait until forward movement has finished before we go on
-  usleep(movementInterval);
-
 }
 
 void RoboState::messageCallback(const turtlebot::mymsg::ConstPtr& msg)
 {
-
-  if(!isMessageSet())
+  // only accept message if movement is not in progress
+  if(getCurrentState()==NEUTRAL)
     {
-
       if(msg->x==0 && msg->y==0)
 	ROS_INFO("No reason to move a distance of 0. Message not sent.");
       else{	  
 	ROS_INFO("X and Y coordinates sent were: x:%f y:%f", msg->x, msg->y);
-	setX(msg->x);
-	setY(msg->y);
+
+	setYawGoal(atan(msg->x/msg->y)*ANGLE_ROTATION);
+
+	setX(msg->x + getXodom());
+	setY(msg->y + getYodom());
 	ROS_INFO("xCoord is: %f. yCoord is: %f", getX(), getY());
-	setMessageStatus(true);
-	setRotated(false);
-	if(getX() >= 0){
-	  setInitialXnegative(false);
-	  setTurnNegX(false);
-	}
-	else{
-	  setInitialXnegative(true);
-	  setTurnNegX(false);
-	}
-	//setErr(sqrt(pow(getX(),2)+pow(getY(),2))*.1);
-	setErr(.1);
-	setRotated(false);
+	
+	// we don't need to face backward since initial movement is forward
+	setCurrentState(FACE_DESTINATION);
+
+
+	  setErr(.1);
       }
       // need to determine what direction we will ultimately face
-      determineYawGoal();
 
+      }
     }
-  else
+  else{
     ROS_INFO("Cannot accept message. Movement still in progress.");
-
+  }
 }
 
 void RoboState::bumperCallback(const create_node::TurtlebotSensorState::ConstPtr& msg)
@@ -331,53 +176,50 @@ void RoboState::bumperCallback(const create_node::TurtlebotSensorState::ConstPtr
     ROS_INFO("The remaining x was:%f and the remaining y was: %f.", getX(), getY());
     setX(0);
     setY(0);
-    // allow RoboState to receive messages again
-    setMessageStatus(false);
+    // allow RoboState::State to receive messages again
+    setCurrentState(NEUTRAL);
   }
 }
   
-// we use this because it has been calibrated to turn 90 degrees left
-void RoboState::rotateLeft()
+/*
+  Section for dealing with internalCount
+
+*/
+
+bool RoboState::currentCountOdd()
 {
-  ROS_INFO("Rotating left.");
-  usleep(movementInterval);
-  this->velocityCommand.linear.x = 0.0;
-  this->velocityCommand.angular.z = left_90;
-  velocityPublisher.publish(this->velocityCommand);
-  usleep(movementInterval/5);
+  if(getInternalCount()%2==1)
+    return true;
+  else
+    return false;
 }
 
-// we use this because it has been calibrated to turn 90 degrees right
-void RoboState::rotateRight()
+void RoboState::incrementInternalCount()
 {
-  ROS_INFO("Rotating right.");
-  usleep(movementInterval);
-  this->velocityCommand.linear.x = 0.0;
-  this->velocityCommand.angular.z = right_90;
-  velocityPublisher.publish(this->velocityCommand);
-  usleep(movementInterval/5);
+  internalCount++;
 }
 
-void RoboState::setMessageStatus(bool status)
+int RoboState::getInternalCount()
 {
-  messageStatus=status;
+  return internalCount;
 }
 
-bool RoboState::isMessageSet()
+/* 
+
+   Get and set functions
+
+*/
+
+void RoboState::setCurrentState(State newState)
 {
-  return messageStatus;
-}
-  
-void RoboState::incrementX(double x)
-{
-  xCoord += x;
+  currentState = newState;
 }
 
-void RoboState::incrementY(double y)
+State RoboState::getCurrentState()
 {
-  yCoord += y;
+  return currentState;
 }
-  
+
 double RoboState::getX()
 {
   return xCoord;
@@ -448,31 +290,6 @@ void RoboState::setErr(double err)
   acceptErr = err;
 }
 
-bool RoboState::getRotated()
-{
-  return rotated;
-}
-
-void RoboState::setRotated(bool rotatedState)
-{
-  rotated = rotatedState;
-}
-
-void RoboState::setInitialXnegative(bool initialXstatus)
-{
-  initXneg = initialXstatus;
-}
-
-bool RoboState::getInitialXnegative()
-{
-  return initXneg;
-}
-
-bool RoboState::getTurnNegX()
-{
-  return negXturn;
-}
-
 void RoboState::setYaw(double newYaw)
 {
   yaw = newYaw;
@@ -492,5 +309,5 @@ double RoboState::getYawGoal()
 {
   return yawGoal;
 }
-
+ 
 #endif

@@ -30,8 +30,7 @@
 #define DEBUG 0
 using namespace std;
 
-enum State{ NEUTRAL, TURN_NEG_X, MOVE_FORWARD_X,FACE_DESTINATION, MOVE_FORWARD_Y, FACE_ORIGINAL };
-enum Direction{X, Y};    
+enum State{ NEUTRAL, FACE_DESTINATION, MOVE_FORWARD, FACE_ORIGINAL};
 
 class RoboState
   {
@@ -52,13 +51,13 @@ class RoboState
     bool faceDestination();
     bool currentCountOdd();
     int getInternalCount();
-    bool goForward(Direction currentDirection);
+    bool goForward();
     void setYawGoal(double newYawGoal);
     void setCurrentState(State newState);
   private:
 
-    void rotateLeft();
-    void rotateRight();
+
+
     void rotateLeft_90();
     void rotateRight_90();
 
