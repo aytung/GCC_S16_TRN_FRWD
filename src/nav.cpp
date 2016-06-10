@@ -50,13 +50,15 @@ RoboState::RoboState(ros::NodeHandle rosNode): xCoord(0), yCoord(0), xOdomOld(0)
 bool RoboState::faceDestination()
 {
   bool done = false;
+
   ROS_INFO("Calling face destination.");
+
   double yawOffset = getYawGoal() - getYaw();
   
   if(yawOffset <= -ANGLE_ERR || yawOffset >= ANGLE_ERR){
     this->velocityCommand.linear.x = 0.0;
     if(yawOffset > 0){
-    this->velocityCommand.angular.z = ROTATION_VELOCITY;
+      this->velocityCommand.angular.z = ROTATION_VELOCITY;
     }
     else{
       this->velocityCommand.angular.z = -ROTATION_VELOCITY;
@@ -64,12 +66,15 @@ bool RoboState::faceDestination()
     
   }
   else {
+    ROS_INFO("We are done with rotation.");
+
     this->velocityCommand.linear.x = 0.0;
     this->velocityCommand.angular.z = 0.0;
 
     done = true;
   }
-velocityPublisher.publish(this->velocityCommand);
+
+  velocityPublisher.publish(this->velocityCommand);
   
   return done;
 }
@@ -82,19 +87,19 @@ bool RoboState::goForward()
   
   double offset = sqrt(pow(getX()-getXodom(),2) + pow(getY()-getYodom(),2));
 
-if(offset <= -getErr() || offset >= getErr()){
-      ROS_INFO("Moving forward because we are off by %f.", offset);
-      this->velocityCommand.linear.x = FORWARD_VELOCITY;
-    }
-    else{
-      ROS_INFO("Done with forward movement in the X direction.");
-      this->velocityCommand.linear.x = 0.0;
-      done = true;
-    }
+  if(offset <= -getErr() || offset >= getErr()){
+    ROS_INFO("Moving forward because we are off by %f.", offset);
+    this->velocityCommand.linear.x = FORWARD_VELOCITY;
+  }
+  else{
+    ROS_INFO("Done with forward movement in the X direction.");
+    this->velocityCommand.linear.x = 0.0;
+    done = true;
+  }
   
 
   this->velocityCommand.angular.z = 0.0;    
-      velocityPublisher.publish(this->velocityCommand);
+  velocityPublisher.publish(this->velocityCommand);
   return done;
 }
 
@@ -154,15 +159,15 @@ void RoboState::messageCallback(const turtlebot::mymsg::ConstPtr& msg)
 	setY(msg->y + getYodom());
 	ROS_INFO("xCoord is: %f. yCoord is: %f", getX(), getY());
 	
-	// we don't need to face backward since initial movement is forward
+
 	setCurrentState(FACE_DESTINATION);
 
 
-	  setErr(.1);
+	setErr(.1);
       }
-      // need to determine what direction we will ultimately face
 
-      }
+
+    }
     
   else{
     ROS_INFO("Cannot accept message. Movement still in progress.");
@@ -186,14 +191,6 @@ void RoboState::bumperCallback(const create_node::TurtlebotSensorState::ConstPtr
   Section for dealing with internalCount
 
 */
-
-bool RoboState::currentCountOdd()
-{
-  if(getInternalCount()%2==1)
-    return true;
-  else
-    return false;
-}
 
 void RoboState::incrementInternalCount()
 {
