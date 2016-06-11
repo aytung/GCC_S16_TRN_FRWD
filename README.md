@@ -1,5 +1,5 @@
-## FORWARD_TURN
-ROS package that goes forward, then turns to reach a location determined by user
+##  TURN_FORWARD
+ROS package that turns, then goes forward to reach a location determined by user
 
 ####**_Version History_**  
 -------------------------  
@@ -88,7 +88,7 @@ rosrun turtlebot nav_node
 rosrun turtlebot ui_node
 ```
 
-**E.
+**E. Enter appropriate coordinate values**
 
 
 *Enter coordinates between 9 and -9 in the window where you ran the command "rosrun turtlebot ui_node"
