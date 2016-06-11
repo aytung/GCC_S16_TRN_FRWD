@@ -63,7 +63,6 @@ There are two Nodes included:
 | ------------------------ |---------------------------------------------------------|
 | ui_node                  | simple publisher that send two double variables         |
 | nav_node                 | subscriber take takes responds to vars sent by ui_node  |
-| fizz, buzz               | bi-directional pub-sub node example                     |  
   
   
 **A. Open 3 shell windows**  
