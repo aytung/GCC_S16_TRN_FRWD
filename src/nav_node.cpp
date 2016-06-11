@@ -28,21 +28,23 @@ int main(int argc, char **argv)
   RoboState robot = RoboState(nh);
   geometry_msgs::Twist cmd_vel;
   
-  ros::Rate loopRate(10); // 10 hz
+  // Need fast loopRate for smooth movement
+  ros::Rate loopRate(200); // 200 hz
 
   while(ros::ok())
     {
      
       robot.incrementInternalCount();
-      //      if(robot.getInternalCount() % 5 == 0){
 	switch (robot.getCurrentState()){
 
 	case NEUTRAL:
+	  // Do nothing
 	  ROS_INFO("Our yaw was %f", robot.getYaw());
 	  break;
 
 
 	case FACE_DESTINATION:
+	  // Try to face the direction of the destination
 	  ROS_INFO("Facing final destination.");
 	  if(robot.faceDestination()){
 	    ROS_INFO("Done facing final destination.");
@@ -51,9 +53,14 @@ int main(int argc, char **argv)
 	  break;
 
 	case MOVE_FORWARD:
+	  // Move forward until we reach desired x and y values
+	  // Great potential for infinite loops and code breakage
+	  // if error values are not set within worse-case scenario
 	  ROS_INFO("Moving forward along x-axis.");
+
 	  if(robot.goForward()){
 	    robot.setCurrentState(FACE_ORIGINAL);
+	    // Our original direction corresponds to a yaw value of 0
 	    robot.setYawGoal(0);
 	  }
 	  break;
@@ -72,8 +79,6 @@ int main(int argc, char **argv)
 
 	  ROS_INFO("Something is broken. We should not reach this point.");
 	}
-
-	//      }
 
       loopRate.sleep();
       ros::spinOnce();

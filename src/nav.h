@@ -35,15 +35,13 @@ enum State{ NEUTRAL, FACE_DESTINATION, MOVE_FORWARD, FACE_ORIGINAL};
 class RoboState
   {
   public:
-    // test function
-    void testForward();
-    void goRobotGo();
+
     // constructor
     RoboState(ros::NodeHandle rosNode);
     double getYaw();
-    
-    void faceOriginal();
-    void rotate_180();
+
+    // These functions are public so we can
+    // rely on main for more coherent structure
     void setY(double y);
     double getY();
     State getCurrentState();
@@ -55,11 +53,6 @@ class RoboState
     void setYawGoal(double newYawGoal);
     void setCurrentState(State newState);
   private:
-
-
-
-    void rotateLeft_90();
-    void rotateRight_90();
 
     // the ros node being used by RoboState
     ros::NodeHandle node;    
